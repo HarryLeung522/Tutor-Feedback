@@ -16,30 +16,26 @@
     textarea { height: 100px; resize: vertical; }
     .selection-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
     .selection-full-width { grid-column: span 2; }
-
-    /* 強制垂直排列 */
     .vertical-inputs { display: flex; flex-direction: column; gap: 18px; margin-top: 15px; }
-    
     .action-btn { 
       width: 100%; padding: 15px; margin-top: 25px; background-color: #3498db; color: #ffffff; 
       border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer;
     }
-    
-    /* 查閱模式表格優化 */
     .table-container { overflow-x: auto; margin-top: 15px; background-color: #ffffff; border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; table-layout: fixed; }
     th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; word-wrap: break-word; vertical-align: top; }
     th { background-color: #f8f9fa; }
-    th:nth-child(1) { width: 35%; } /* 日期欄 */
+    th:nth-child(1) { width: 35%; }
     .text-red { color: #e74c3c; font-weight: bold; }
     .text-grey { color: #95a5a6; }
     #loading { text-align: center; padding: 40px; font-size: 16px; font-weight: bold; color: #7f8c8d; }
+    .auto-selected-hint { font-size: 12px; color: #27ae60; font-weight: normal; margin-left: 5px; }
   </style>
 </head>
 <body>
 
   <h1>📅 導師進度匯報表</h1>
-  <div id="loading">正在讀取試算表數據...</div>
+  <div id="loading">正在讀取最新課堂數據...</div>
 
   <div id="main-content" style="display: none;">
     <div class="card">
@@ -52,7 +48,7 @@
           </select>
         </div>
         <div class="selection-cell">
-          <label>導師：</label>
+          <label>導師：<span id="autoHint" class="auto-selected-hint"></span></label>
           <select id="tutorSelect" onchange="onTutorChange()"><option value="">載入中...</option></select>
         </div>
         <div class="selection-cell">
@@ -86,7 +82,6 @@
   </div>
 
   <script>
-    // ⚠️ 請確保此網址與你最新的 Apps Script 部署網址一致
     const GAS_URL = "https://script.google.com/macros/s/AKfycbx7-1RAg-kf5H5b8DC3do55daEHxcJvF2DXkrNoBNS4XKTalS9QNKjoYA7psZcDRmIE0Q/exec"; 
     
     let globalData = [];
@@ -96,15 +91,11 @@
         globalData = data;
         document.getElementById('loading').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
-        
-        // 提取導師名單
         let tutors = new Set();
         data.forEach(r => r.tutors && r.tutors.split('/').forEach(t => tutors.add(t.trim())));
         const ts = document.getElementById('tutorSelect');
         ts.innerHTML = '<option value="">請選擇導師...</option>';
         Array.from(tutors).sort().forEach(t => ts.innerHTML += `<option value="${t}">${t}</option>`);
-      }).catch(err => {
-        document.getElementById('loading').innerText = "連線超時，請檢查網絡或 API 設置。";
       });
     };
 
@@ -115,28 +106,69 @@
       onCourseChange();
     }
 
-    // 格式化顯示文字
     function formatLabel(row, isTable) {
       const day = row.dayOfWeek ? row.dayOfWeek.replace('星期', '') : '';
-      const date = row.dateStr; // 已透過 getDisplayValues 取得 "2026年3月24日"
+      const date = row.dateStr;
       const time = row.timeStr;
-      if (isTable) {
-        return `第${row.lessonNum}堂<br>${date}<br>（${day}）<br>${time}`;
-      }
+      if (isTable) return `第${row.lessonNum}堂<br>${date}<br>（${day}）<br>${time}`;
       return `第${row.lessonNum}堂 - ${date}（${day}）- ${time}`;
+    }
+
+    // 智能輔助函數：解析中文日期
+    function parseDateStr(s) {
+      const m = s.match(/(\d+)年(\d+)月(\d+)日/);
+      if(!m) return new Date(0);
+      return new Date(m[1], m[2]-1, m[3]);
     }
 
     function onTutorChange() {
       const t = document.getElementById('tutorSelect').value;
-      const s = document.getElementById('schoolSelect');
-      s.innerHTML = '<option value="">請選擇學校...</option>';
+      const sSelect = document.getElementById('schoolSelect');
+      const hint = document.getElementById('autoHint');
+      hint.innerText = "";
+      
+      sSelect.innerHTML = '<option value="">請選擇學校...</option>';
       resetSelect('courseSelect', '請先選學校');
       resetSelect('lessonSelect', '請先選課程');
-      if (!t) { s.disabled = true; return; }
-      s.disabled = false;
-      let set = new Set();
-      globalData.forEach(r => r.tutors.includes(t) && set.add(r.school));
-      set.forEach(v => s.innerHTML += `<option value="${v}">${v}</option>`);
+      
+      if (!t) { sSelect.disabled = true; return; }
+      sSelect.disabled = false;
+      
+      // 1. 填充學校選單
+      let schoolSet = new Set();
+      let tutorRows = globalData.filter(r => r.tutors.includes(t));
+      tutorRows.forEach(r => schoolSet.add(r.school));
+      schoolSet.forEach(v => sSelect.innerHTML += `<option value="${v}">${v}</option>`);
+
+      // 2. 智能預選邏輯
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
+      
+      // 尋找今日課堂
+      let targetRows = tutorRows.filter(r => r.dateStr === todayStr);
+      if (targetRows.length > 0) {
+        // 今日有多堂則取最早的 (假設 timeStr 格式如 14:00-15:00)
+        targetRows.sort((a, b) => a.timeStr.localeCompare(b.timeStr));
+        hint.innerText = "已自動選取今日課堂";
+      } else {
+        // 今日無課，尋找最近已完成的課堂 (日期 < 今日，且最接近今日)
+        let pastRows = tutorRows.filter(r => parseDateStr(r.dateStr) < now.setHours(0,0,0,0));
+        if (pastRows.length > 0) {
+          pastRows.sort((a, b) => parseDateStr(b.dateStr) - parseDateStr(a.dateStr));
+          targetRows = [pastRows[0]];
+          hint.innerText = "已預選最近一堂課堂";
+        }
+      }
+
+      // 3. 執行自動選取
+      if (targetRows.length > 0) {
+        const best = targetRows[0];
+        sSelect.value = best.school;
+        onSchoolChange(); // 觸發學校變更
+        document.getElementById('courseSelect').value = best.courseName;
+        onCourseChange(); // 觸發課程變更
+        document.getElementById('lessonSelect').value = best.rowNum;
+      }
     }
 
     function onSchoolChange() {
@@ -162,7 +194,6 @@
       if (!c) { l.disabled = true; return; }
       
       const filtered = globalData.filter(r => r.tutors.includes(t) && r.school === s && r.courseName === c);
-      
       if (mode === 'write') {
         l.disabled = false;
         filtered.forEach(r => l.innerHTML += `<option value="${r.rowNum}">${formatLabel(r, false)}</option>`);
@@ -182,16 +213,9 @@
       let h = `<table><tr><th>課堂詳情</th><th>課室情況</th><th>進度</th><th>上課情況</th><th>備注</th></tr>`;
       const now = new Date(); now.setHours(0,0,0,0);
       data.forEach(r => {
-        const dMatch = r.dateStr.match(/(\d+)年(\d+)月(\d+)日/);
-        const isPast = dMatch ? new Date(dMatch[1], dMatch[2]-1, dMatch[3]) < now : false;
+        const isPast = parseDateStr(r.dateStr) < now;
         const cell = (txt) => txt ? txt : (isPast ? '<span class="text-red">未填寫</span>' : '<span class="text-grey">-</span>');
-        h += `<tr>
-          <td>${formatLabel(r, true)}</td>
-          <td>${cell(r.roomStatus)}</td>
-          <td>${cell(r.progress)}</td>
-          <td>${cell(r.classStatus)}</td>
-          <td>${cell(r.remarks)}</td>
-        </tr>`;
+        h += `<tr><td>${formatLabel(r, true)}</td><td>${cell(r.roomStatus)}</td><td>${cell(r.progress)}</td><td>${cell(r.classStatus)}</td><td>${cell(r.remarks)}</td></tr>`;
       });
       document.getElementById('tableContainer').innerHTML = h + '</table>';
     }
@@ -200,8 +224,7 @@
       const row = document.getElementById('lessonSelect').value;
       if (!row) return alert('請先選取課堂！');
       const btn = document.getElementById('submitBtn');
-      btn.disabled = true; btn.innerText = '正在傳送...';
-      
+      btn.disabled = true; btn.innerText = '正在上傳數據...';
       const payload = {
         action: 'update', rowNum: row,
         roomStatus: document.getElementById('roomStatus').value,
@@ -209,23 +232,20 @@
         classStatus: document.getElementById('classStatus').value,
         remarks: document.getElementById('remarks').value
       };
-
       fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
       .then(res => res.json()).then(res => {
         if(res.success) {
           alert('上傳成功！');
           btn.disabled = false; btn.innerText = '確認上傳';
-          // 更新本地數據
           const r = globalData.find(i => i.rowNum == row);
           r.roomStatus = payload.roomStatus; r.progress = payload.progress; 
           r.classStatus = payload.classStatus; r.remarks = payload.remarks;
-          // 清空輸入
           document.getElementById('roomStatus').value = '';
           document.getElementById('progress').value = '';
           document.getElementById('classStatus').value = '';
           document.getElementById('remarks').value = '';
         }
-      }).catch(e => alert('上傳失敗，請聯絡管理員'));
+      }).catch(e => alert('連線失敗，請重試'));
     }
   </script>
 </body>
