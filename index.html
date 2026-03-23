@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-HK">
 <head>
-  <base target="_top">
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>導師進度匯報表（導師版）</title>
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; background-color: #f4f7f6; color: #333; }
     h1 { font-size: 22px; text-align: center; color: #2c3e50; }
@@ -28,7 +29,7 @@
 
   <h1>導師進度匯報表（導師版）</h1>
   
-  <div id="loading">系統載入中，請稍候...</div>
+  <div id="loading">系統載入中，請稍候... (從資料庫讀取中)</div>
 
   <div class="card" id="main-content" style="display: none;">
     <label>請選擇功能：</label>
@@ -72,11 +73,20 @@
   </div>
 
   <script>
+    // 這裡已經換成你專屬的 Google Apps Script API 網址
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbx7-1RAg-kf5H5b8DC3do55daEHxcJvF2DXkrNoBNS4XKTalS9QNKjoYA7psZcDRmIE0Q/exec"; 
+    
     let globalData = [];
 
-    // 初始化：從 Google Sheet 拿取資料
+    // 初始化：網頁載入時呼叫 API 獲取資料
     window.onload = function() {
-      google.script.run.withSuccessHandler(initApp).getSheetData();
+      fetch(GAS_URL + "?action=getData")
+        .then(response => response.json())
+        .then(data => initApp(data))
+        .catch(error => {
+          document.getElementById('loading').innerText = "連線失敗，請稍後再試或聯絡管理員。";
+          console.error('API Fetch Error:', error);
+        });
     };
 
     function initApp(data) {
@@ -84,7 +94,6 @@
       document.getElementById('loading').style.display = 'none';
       document.getElementById('main-content').style.display = 'block';
       
-      // 提取並過濾所有獨立的導師名字 (處理 "A/B/C" 的情況)
       let tutors = new Set();
       data.forEach(row => {
         if(row.tutors) {
@@ -98,21 +107,19 @@
       });
     }
 
-    // 切換 填寫/查閱 模式
     function toggleMode() {
       const mode = document.getElementById('modeSelect').value;
       if (mode === 'write') {
         document.getElementById('writeSection').style.display = 'block';
         document.getElementById('readSection').style.display = 'none';
-        onCourseChange(); // 刷新選項
+        onCourseChange(); 
       } else {
         document.getElementById('writeSection').style.display = 'none';
         document.getElementById('readSection').style.display = 'block';
-        onCourseChange(); // 刷新表格
+        onCourseChange(); 
       }
     }
 
-    // 導師選取後更新學校
     function onTutorChange() {
       const tutor = document.getElementById('tutorSelect').value;
       const schoolSelect = document.getElementById('schoolSelect');
@@ -133,7 +140,6 @@
       Array.from(schools).sort().forEach(s => schoolSelect.innerHTML += `<option value="${s}">${s}</option>`);
     }
 
-    // 學校選取後更新課程
     function onSchoolChange() {
       const tutor = document.getElementById('tutorSelect').value;
       const school = document.getElementById('schoolSelect').value;
@@ -157,7 +163,6 @@
       Array.from(courses).sort().forEach(c => courseSelect.innerHTML += `<option value="${c}">${c}</option>`);
     }
 
-    // 課程選取後，依據模式更新「課堂下拉」或「生成表格」
     function onCourseChange() {
       const tutor = document.getElementById('tutorSelect').value;
       const school = document.getElementById('schoolSelect').value;
@@ -175,7 +180,6 @@
         lessonSelect.disabled = false;
         resetSelect(lessonSelect, '請選擇課堂...');
         filteredData.forEach(row => {
-          // 格式：第C行堂 - D行 - E行
           const label = `第${row.lessonNum}堂 - ${row.dateStr} - ${row.dayOfWeek}`;
           lessonSelect.innerHTML += `<option value="${row.rowNum}">${label}</option>`;
         });
@@ -184,20 +188,17 @@
       }
     }
 
-    // 工具：重置下拉選單
     function resetSelect(element, defaultText) {
       element.innerHTML = `<option value="">${defaultText}</option>`;
       element.disabled = true;
     }
 
-    // 日期解析器："2026年3月21日" -> JS Date
     function parseDate(dateStr) {
       const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
       if (match) return new Date(match[1], parseInt(match[2]) - 1, match[3]);
-      return new Date(dateStr); // 備用方案
+      return new Date(dateStr); 
     }
 
-    // 渲染查閱表格
     function renderTable(data, school, course) {
       document.getElementById('readTitle').innerText = `${school} - ${course}`;
       
@@ -215,10 +216,9 @@
 
       data.forEach(row => {
         const rowDate = parseDate(row.dateStr);
-        const isPast = rowDate < today; // 已經過去的課堂
+        const isPast = rowDate < today; 
         const title = `第${row.lessonNum}堂<br>${row.dateStr}<br>${row.dayOfWeek}`;
         
-        // 判斷欄位狀態的輔助函數
         const getCellHtml = (content) => {
           if (content) return content;
           if (isPast) return `<span class="text-red">未填寫</span>`;
@@ -238,7 +238,6 @@
       document.getElementById('tableContainer').innerHTML = html;
     }
 
-    // 提交資料
     function submitData() {
       const rowNum = document.getElementById('lessonSelect').value;
       if (!rowNum) return alert('請先完整選擇要填寫的課堂！');
@@ -252,30 +251,54 @@
       btn.disabled = true;
       btn.innerText = '上傳中...';
 
-      google.script.run.withSuccessHandler(() => {
-        alert('資料已成功上傳！');
-        btn.disabled = false;
-        btn.innerText = '上傳課堂記錄';
-        
-        // 清空輸入框
-        document.getElementById('roomStatus').value = '';
-        document.getElementById('progress').value = '';
-        document.getElementById('classStatus').value = '';
-        document.getElementById('remarks').value = '';
+      // 準備要傳送的資料
+      const payload = {
+        action: 'update',
+        rowNum: rowNum,
+        roomStatus: roomStatus,
+        progress: progress,
+        classStatus: classStatus,
+        remarks: remarks
+      };
 
-        // 更新本地緩存資料以免查閱時看到舊資料，不用重新載入頁面
-        const updatedRow = globalData.find(r => r.rowNum == rowNum);
-        if(updatedRow) {
-          updatedRow.roomStatus = roomStatus;
-          updatedRow.progress = progress;
-          updatedRow.classStatus = classStatus;
-          updatedRow.remarks = remarks;
+      // 透過 API 傳送資料至 Google Sheet
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(result => {
+        if (result.success) {
+          alert('資料已成功上傳！');
+          btn.disabled = false;
+          btn.innerText = '上傳課堂記錄';
+          
+          // 清空欄位
+          document.getElementById('roomStatus').value = '';
+          document.getElementById('progress').value = '';
+          document.getElementById('classStatus').value = '';
+          document.getElementById('remarks').value = '';
+
+          // 更新本地快取，以免查閱時看到舊資料
+          const updatedRow = globalData.find(r => r.rowNum == rowNum);
+          if(updatedRow) {
+            updatedRow.roomStatus = roomStatus;
+            updatedRow.progress = progress;
+            updatedRow.classStatus = classStatus;
+            updatedRow.remarks = remarks;
+          }
+        } else {
+          throw new Error(result.error || "未知錯誤");
         }
-      }).withFailureHandler((error) => {
-        alert('上傳失敗：' + error);
+      })
+      .catch(error => {
+        alert('上傳失敗：' + error.message);
         btn.disabled = false;
         btn.innerText = '上傳課堂記錄';
-      }).updateRecord(rowNum, roomStatus, progress, classStatus, remarks);
+      });
     }
   </script>
 </body>
