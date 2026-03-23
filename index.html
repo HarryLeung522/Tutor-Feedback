@@ -9,33 +9,64 @@
     h1 { font-size: 24px; text-align: center; color: #2c3e50; font-weight: bold; margin-bottom: 20px; }
     .card { background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
     label { display: block; font-weight: bold; font-size: 14px; color: #2c3e50; margin-bottom: 8px; }
+    
     select, textarea { 
       width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; 
       font-size: 16px; background-color: #ebf0f1; margin-bottom: 5px;
     }
     textarea { height: 100px; resize: vertical; }
+
     .selection-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
     .selection-full-width { grid-column: span 2; }
     .vertical-inputs { display: flex; flex-direction: column; gap: 18px; margin-top: 15px; }
+    
     .action-btn { 
       width: 100%; padding: 15px; margin-top: 25px; background-color: #3498db; color: #ffffff; 
       border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer;
     }
-    .table-container { overflow-x: auto; margin-top: 15px; background-color: #ffffff; border-radius: 8px; }
-    table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; table-layout: fixed; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; word-wrap: break-word; vertical-align: top; }
-    th { background-color: #f8f9fa; }
-    th:nth-child(1) { width: 35%; }
+
+    /* 查閱模式表格優化：手機版橫向捲動 */
+    .table-container { 
+      overflow-x: auto; 
+      margin-top: 15px; 
+      background-color: #ffffff; 
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      /* 設定最小寬度，確保 5 格內容在手機上不會擠扁，需要拉過去看 */
+      min-width: 850px; 
+    }
+    th, td { 
+      border: 1px solid #ddd; 
+      padding: 12px 10px; 
+      text-align: left; 
+      font-size: 14px; 
+      word-wrap: break-word; 
+      vertical-align: top; 
+    }
+    th { background-color: #f8f9fa; font-weight: bold; }
+
+    /* 欄位寬度微調 */
+    th:nth-child(1), td:nth-child(1) { width: 110px; } /* 課堂日期：窄長型 */
+    th:nth-child(2), td:nth-child(2) { width: 180px; } /* 課室情況 */
+    th:nth-child(3), td:nth-child(3) { width: 180px; } /* 進度 */
+    th:nth-child(4), td:nth-child(4) { width: 180px; } /* 上課情況 */
+    th:nth-child(5), td:nth-child(5) { width: 200px; } /* 備注：最闊 */
+
     .text-red { color: #e74c3c; font-weight: bold; }
     .text-grey { color: #95a5a6; }
     #loading { text-align: center; padding: 40px; font-size: 16px; font-weight: bold; color: #7f8c8d; }
     .auto-selected-hint { font-size: 12px; color: #27ae60; font-weight: normal; margin-left: 5px; }
+    .scroll-hint { font-size: 12px; color: #7f8c8d; margin-bottom: 5px; font-style: italic; }
   </style>
 </head>
 <body>
 
   <h1>📅 導師進度匯報表</h1>
-  <div id="loading">正在讀取最新課堂數據...</div>
+  <div id="loading">數據讀取中...</div>
 
   <div id="main-content" style="display: none;">
     <div class="card">
@@ -76,7 +107,8 @@
     </div>
 
     <div id="readSection" class="card" style="display: none;">
-      <h3 id="readTitle" style="margin-bottom:10px;">查閱結果</h3>
+      <h3 id="readTitle" style="margin-bottom:5px;">查閱結果</h3>
+      <div class="scroll-hint">💡 提示：可向右滑動表格以查看詳細紀錄</div>
       <div class="table-container" id="tableContainer"></div>
     </div>
   </div>
@@ -114,7 +146,6 @@
       return `第${row.lessonNum}堂 - ${date}（${day}）- ${time}`;
     }
 
-    // 智能輔助函數：解析中文日期
     function parseDateStr(s) {
       const m = s.match(/(\d+)年(\d+)月(\d+)日/);
       if(!m) return new Date(0);
@@ -134,39 +165,33 @@
       if (!t) { sSelect.disabled = true; return; }
       sSelect.disabled = false;
       
-      // 1. 填充學校選單
       let schoolSet = new Set();
       let tutorRows = globalData.filter(r => r.tutors.includes(t));
       tutorRows.forEach(r => schoolSet.add(r.school));
       schoolSet.forEach(v => sSelect.innerHTML += `<option value="${v}">${v}</option>`);
 
-      // 2. 智能預選邏輯
       const now = new Date();
       const todayStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
       
-      // 尋找今日課堂
       let targetRows = tutorRows.filter(r => r.dateStr === todayStr);
       if (targetRows.length > 0) {
-        // 今日有多堂則取最早的 (假設 timeStr 格式如 14:00-15:00)
         targetRows.sort((a, b) => a.timeStr.localeCompare(b.timeStr));
-        hint.innerText = "已自動選取今日課堂";
+        hint.innerText = "已自動選取";
       } else {
-        // 今日無課，尋找最近已完成的課堂 (日期 < 今日，且最接近今日)
         let pastRows = tutorRows.filter(r => parseDateStr(r.dateStr) < now.setHours(0,0,0,0));
         if (pastRows.length > 0) {
           pastRows.sort((a, b) => parseDateStr(b.dateStr) - parseDateStr(a.dateStr));
           targetRows = [pastRows[0]];
-          hint.innerText = "已預選最近一堂課堂";
+          hint.innerText = "已自動選取";
         }
       }
 
-      // 3. 執行自動選取
       if (targetRows.length > 0) {
         const best = targetRows[0];
         sSelect.value = best.school;
-        onSchoolChange(); // 觸發學校變更
+        onSchoolChange();
         document.getElementById('courseSelect').value = best.courseName;
-        onCourseChange(); // 觸發課程變更
+        onCourseChange();
         document.getElementById('lessonSelect').value = best.rowNum;
       }
     }
