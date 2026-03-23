@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; background-color: #f4f7f6; color: #333; }
+    h1 { font-size: 22px; text-align: center; color: #2c3e50; }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    label { display: block; margin-top: 15px; font-weight: bold; font-size: 14px; color: #555; }
+    select, textarea, input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+    textarea { height: 80px; resize: vertical; }
+    button { width: 100%; padding: 12px; margin-top: 25px; background-color: #3498db; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    button:disabled { background-color: #95a5a6; }
+    
+    /* 表格樣式 */
+    .table-container { overflow-x: auto; margin-top: 15px; }
+    table { width: 100%; border-collapse: collapse; min-width: 600px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; }
+    th { background-color: #f8f9fa; font-weight: bold; }
+    .text-red { color: #e74c3c; font-weight: bold; }
+    .text-grey { color: #95a5a6; }
+    
+    #loading { text-align: center; color: #7f8c8d; font-size: 14px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>導師進度匯報表（導師版）</h1>
+  
+  <div id="loading">系統載入中，請稍候...</div>
+
+  <div class="card" id="main-content" style="display: none;">
+    <label>請選擇功能：</label>
+    <select id="modeSelect" onchange="toggleMode()">
+      <option value="write" selected>填寫課堂記錄</option>
+      <option value="read">查閱課堂記錄</option>
+    </select>
+
+    <label>導師名稱：</label>
+    <select id="tutorSelect" onchange="onTutorChange()"><option value="">請選擇...</option></select>
+
+    <label>學校：</label>
+    <select id="schoolSelect" onchange="onSchoolChange()" disabled><option value="">請先選擇導師...</option></select>
+
+    <label>課程：</label>
+    <select id="courseSelect" onchange="onCourseChange()" disabled><option value="">請先選擇學校...</option></select>
+
+    <div id="writeSection">
+      <label>課堂：</label>
+      <select id="lessonSelect" disabled><option value="">請先選擇課程...</option></select>
+
+      <label>課室情況</label>
+      <textarea id="roomStatus"></textarea>
+
+      <label>進度</label>
+      <textarea id="progress"></textarea>
+
+      <label>上課情況</label>
+      <textarea id="classStatus"></textarea>
+
+      <label>備注</label>
+      <textarea id="remarks"></textarea>
+
+      <button id="submitBtn" onclick="submitData()">上傳課堂記錄</button>
+    </div>
+
+    <div id="readSection" style="display: none;">
+      <h3 id="readTitle" style="margin-top:20px; color:#2c3e50; font-size:18px;"></h3>
+      <div class="table-container" id="tableContainer"></div>
+    </div>
+  </div>
+
+  <script>
+    let globalData = [];
+
+    // 初始化：從 Google Sheet 拿取資料
+    window.onload = function() {
+      google.script.run.withSuccessHandler(initApp).getSheetData();
+    };
+
+    function initApp(data) {
+      globalData = data;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('main-content').style.display = 'block';
+      
+      // 提取並過濾所有獨立的導師名字 (處理 "A/B/C" 的情況)
+      let tutors = new Set();
+      data.forEach(row => {
+        if(row.tutors) {
+          row.tutors.split('/').forEach(t => tutors.add(t.trim()));
+        }
+      });
+      
+      const tutorSelect = document.getElementById('tutorSelect');
+      Array.from(tutors).sort().forEach(t => {
+        if(t) tutorSelect.innerHTML += `<option value="${t}">${t}</option>`;
+      });
+    }
+
+    // 切換 填寫/查閱 模式
+    function toggleMode() {
+      const mode = document.getElementById('modeSelect').value;
+      if (mode === 'write') {
+        document.getElementById('writeSection').style.display = 'block';
+        document.getElementById('readSection').style.display = 'none';
+        onCourseChange(); // 刷新選項
+      } else {
+        document.getElementById('writeSection').style.display = 'none';
+        document.getElementById('readSection').style.display = 'block';
+        onCourseChange(); // 刷新表格
+      }
+    }
+
+    // 導師選取後更新學校
+    function onTutorChange() {
+      const tutor = document.getElementById('tutorSelect').value;
+      const schoolSelect = document.getElementById('schoolSelect');
+      resetSelect(schoolSelect, '請選擇...');
+      resetSelect(document.getElementById('courseSelect'), '請先選擇學校...');
+      resetSelect(document.getElementById('lessonSelect'), '請先選擇課程...');
+      document.getElementById('tableContainer').innerHTML = '';
+      document.getElementById('readTitle').innerText = '';
+
+      if (!tutor) { schoolSelect.disabled = true; return; }
+      schoolSelect.disabled = false;
+
+      let schools = new Set();
+      globalData.forEach(row => {
+        if (row.tutors.includes(tutor) && row.school) schools.add(row.school);
+      });
+
+      Array.from(schools).sort().forEach(s => schoolSelect.innerHTML += `<option value="${s}">${s}</option>`);
+    }
+
+    // 學校選取後更新課程
+    function onSchoolChange() {
+      const tutor = document.getElementById('tutorSelect').value;
+      const school = document.getElementById('schoolSelect').value;
+      const courseSelect = document.getElementById('courseSelect');
+      
+      resetSelect(courseSelect, '請選擇...');
+      resetSelect(document.getElementById('lessonSelect'), '請先選擇課程...');
+      document.getElementById('tableContainer').innerHTML = '';
+      document.getElementById('readTitle').innerText = '';
+
+      if (!school) { courseSelect.disabled = true; return; }
+      courseSelect.disabled = false;
+
+      let courses = new Set();
+      globalData.forEach(row => {
+        if (row.tutors.includes(tutor) && row.school === school && row.courseName) {
+          courses.add(row.courseName);
+        }
+      });
+
+      Array.from(courses).sort().forEach(c => courseSelect.innerHTML += `<option value="${c}">${c}</option>`);
+    }
+
+    // 課程選取後，依據模式更新「課堂下拉」或「生成表格」
+    function onCourseChange() {
+      const tutor = document.getElementById('tutorSelect').value;
+      const school = document.getElementById('schoolSelect').value;
+      const course = document.getElementById('courseSelect').value;
+      const mode = document.getElementById('modeSelect').value;
+      const lessonSelect = document.getElementById('lessonSelect');
+
+      if (!course) { lessonSelect.disabled = true; return; }
+
+      const filteredData = globalData.filter(row => 
+        row.tutors.includes(tutor) && row.school === school && row.courseName === course
+      );
+
+      if (mode === 'write') {
+        lessonSelect.disabled = false;
+        resetSelect(lessonSelect, '請選擇課堂...');
+        filteredData.forEach(row => {
+          // 格式：第C行堂 - D行 - E行
+          const label = `第${row.lessonNum}堂 - ${row.dateStr} - ${row.dayOfWeek}`;
+          lessonSelect.innerHTML += `<option value="${row.rowNum}">${label}</option>`;
+        });
+      } else {
+        renderTable(filteredData, school, course);
+      }
+    }
+
+    // 工具：重置下拉選單
+    function resetSelect(element, defaultText) {
+      element.innerHTML = `<option value="">${defaultText}</option>`;
+      element.disabled = true;
+    }
+
+    // 日期解析器："2026年3月21日" -> JS Date
+    function parseDate(dateStr) {
+      const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+      if (match) return new Date(match[1], parseInt(match[2]) - 1, match[3]);
+      return new Date(dateStr); // 備用方案
+    }
+
+    // 渲染查閱表格
+    function renderTable(data, school, course) {
+      document.getElementById('readTitle').innerText = `${school} - ${course}`;
+      
+      let html = `<table>
+                    <tr>
+                      <th>課堂日期及堂數</th>
+                      <th>課室情況</th>
+                      <th>進度</th>
+                      <th>上課情況</th>
+                      <th>備注</th>
+                    </tr>`;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      data.forEach(row => {
+        const rowDate = parseDate(row.dateStr);
+        const isPast = rowDate < today; // 已經過去的課堂
+        const title = `第${row.lessonNum}堂<br>${row.dateStr}<br>${row.dayOfWeek}`;
+        
+        // 判斷欄位狀態的輔助函數
+        const getCellHtml = (content) => {
+          if (content) return content;
+          if (isPast) return `<span class="text-red">未填寫</span>`;
+          return `<span class="text-grey">-</span>`;
+        };
+
+        html += `<tr>
+                  <td>${title}</td>
+                  <td>${getCellHtml(row.roomStatus)}</td>
+                  <td>${getCellHtml(row.progress)}</td>
+                  <td>${getCellHtml(row.classStatus)}</td>
+                  <td>${getCellHtml(row.remarks)}</td>
+                 </tr>`;
+      });
+      
+      html += `</table>`;
+      document.getElementById('tableContainer').innerHTML = html;
+    }
+
+    // 提交資料
+    function submitData() {
+      const rowNum = document.getElementById('lessonSelect').value;
+      if (!rowNum) return alert('請先完整選擇要填寫的課堂！');
+
+      const roomStatus = document.getElementById('roomStatus').value;
+      const progress = document.getElementById('progress').value;
+      const classStatus = document.getElementById('classStatus').value;
+      const remarks = document.getElementById('remarks').value;
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerText = '上傳中...';
+
+      google.script.run.withSuccessHandler(() => {
+        alert('資料已成功上傳！');
+        btn.disabled = false;
+        btn.innerText = '上傳課堂記錄';
+        
+        // 清空輸入框
+        document.getElementById('roomStatus').value = '';
+        document.getElementById('progress').value = '';
+        document.getElementById('classStatus').value = '';
+        document.getElementById('remarks').value = '';
+
+        // 更新本地緩存資料以免查閱時看到舊資料，不用重新載入頁面
+        const updatedRow = globalData.find(r => r.rowNum == rowNum);
+        if(updatedRow) {
+          updatedRow.roomStatus = roomStatus;
+          updatedRow.progress = progress;
+          updatedRow.classStatus = classStatus;
+          updatedRow.remarks = remarks;
+        }
+      }).withFailureHandler((error) => {
+        alert('上傳失敗：' + error);
+        btn.disabled = false;
+        btn.innerText = '上傳課堂記錄';
+      }).updateRecord(rowNum, roomStatus, progress, classStatus, remarks);
+    }
+  </script>
+</body>
+</html>
