@@ -7,313 +7,225 @@
   <style>
     body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 15px; background-color: #f4f7f6; color: #333; }
     h1 { font-size: 24px; text-align: center; color: #2c3e50; font-weight: bold; margin-bottom: 20px; }
-    
     .card { background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    label { display: block; font-weight: bold; font-size: 14px; color: #2c3e50; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-    
-    select, textarea, input { 
+    label { display: block; font-weight: bold; font-size: 14px; color: #2c3e50; margin-bottom: 8px; }
+    select, textarea { 
       width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; 
-      font-size: 16px; background-color: #ebf0f1; transition: border-color 0.2s, box-shadow 0.2s;
+      font-size: 16px; background-color: #ebf0f1; margin-bottom: 5px;
     }
-    select:focus, textarea:focus { border-color: #3498db; outline: none; box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2); }
     textarea { height: 100px; resize: vertical; }
-    
     .selection-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
     .selection-full-width { grid-column: span 2; }
-    .selection-cell { display: flex; flex-direction: column; }
 
-    /* 【修改】填寫模式的文字方塊改為純垂直分佈 */
-    .textarea-grid { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
-    .textarea-cell { display: flex; flex-direction: column; }
-    
-    #readTitle { color: #2c3e50; font-size: 18px; font-weight: bold; margin-bottom: 15px; text-align: left; }
+    /* 強制垂直排列 */
+    .vertical-inputs { display: flex; flex-direction: column; gap: 18px; margin-top: 15px; }
     
     .action-btn { 
       width: 100%; padding: 15px; margin-top: 25px; background-color: #3498db; color: #ffffff; 
-      border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; 
+      border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer;
     }
-    .action-btn:hover { background-color: #2980b9; } 
-    .action-btn:disabled { background-color: #95a5a6; cursor: not-allowed; }
     
-    /* 【修改】查閱模式表格樣式優化，適應手機螢幕 */
+    /* 查閱模式表格優化 */
     .table-container { overflow-x: auto; margin-top: 15px; background-color: #ffffff; border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; table-layout: fixed; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word; vertical-align: top; }
-    th { background-color: #f8f9fa; font-weight: bold; color: #2c3e50; border-bottom: 2px solid #ddd; }
-    th:nth-child(1) { width: 28%; } /* 讓第一欄（日期）稍微寬一點，避免折行太碎 */
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 13px; word-wrap: break-word; vertical-align: top; }
+    th { background-color: #f8f9fa; }
+    th:nth-child(1) { width: 35%; } /* 日期欄 */
     .text-red { color: #e74c3c; font-weight: bold; }
     .text-grey { color: #95a5a6; }
-    
-    #loading { text-align: center; color: #7f8c8d; font-size: 16px; font-weight: bold; padding: 40px; }
-
-    /* 手機版極限壓縮設定 */
-    @media (max-width: 600px) {
-      body { padding: 10px; }
-      .card { padding: 15px; }
-      th, td { padding: 8px 4px; font-size: 12px; } /* 縮小字體與內距以容納五個欄位 */
-    }
+    #loading { text-align: center; padding: 40px; font-size: 16px; font-weight: bold; color: #7f8c8d; }
   </style>
 </head>
 <body>
 
-  <h1>&#128198; 導師進度匯報表</h1>
-  
-  <div id="loading">系統載入中，請稍候...</div>
+  <h1>📅 導師進度匯報表</h1>
+  <div id="loading">正在讀取試算表數據...</div>
 
   <div id="main-content" style="display: none;">
     <div class="card">
       <div class="selection-grid">
         <div class="selection-cell selection-full-width">
-          <label>請選擇功能：</label>
+          <label>切換模式：</label>
           <select id="modeSelect" onchange="toggleMode()">
-            <option value="write" selected>填寫課堂記錄</option>
+            <option value="write">填寫課堂記錄</option>
             <option value="read">查閱課堂記錄</option>
           </select>
         </div>
         <div class="selection-cell">
-          <label>導師名稱：</label>
-          <select id="tutorSelect" onchange="onTutorChange()"><option value="">請選擇...</option></select>
+          <label>導師：</label>
+          <select id="tutorSelect" onchange="onTutorChange()"><option value="">載入中...</option></select>
         </div>
         <div class="selection-cell">
           <label>學校：</label>
-          <select id="schoolSelect" onchange="onSchoolChange()" disabled><option value="">請先選擇導師...</option></select>
+          <select id="schoolSelect" onchange="onSchoolChange()" disabled><option value="">請先選導師</option></select>
         </div>
         <div class="selection-cell selection-full-width">
           <label>課程：</label>
-          <select id="courseSelect" onchange="onCourseChange()" disabled><option value="">請先選擇學校...</option></select>
+          <select id="courseSelect" onchange="onCourseChange()" disabled><option value="">請先選學校</option></select>
         </div>
       </div>
     </div>
 
     <div id="writeSection" class="card">
-      <label>課堂：</label>
-      <select id="lessonSelect" disabled><option value="">請先選擇課程...</option></select>
+      <label>課堂選取：</label>
+      <select id="lessonSelect" disabled><option value="">請先選課程</option></select>
 
-      <div class="textarea-grid">
-        <div class="textarea-cell"><label>課室情況</label><textarea id="roomStatus"></textarea></div>
-        <div class="textarea-cell"><label>進度</label><textarea id="progress"></textarea></div>
-        <div class="textarea-cell"><label>上課情況</label><textarea id="classStatus"></textarea></div>
-        <div class="textarea-cell"><label>備注</label><textarea id="remarks"></textarea></div>
+      <div class="vertical-inputs">
+        <div><label>課室情況</label><textarea id="roomStatus"></textarea></div>
+        <div><label>進度</label><textarea id="progress"></textarea></div>
+        <div><label>上課情況</label><textarea id="classStatus"></textarea></div>
+        <div><label>備注</label><textarea id="remarks"></textarea></div>
       </div>
-
-      <button id="submitBtn" class="action-btn" onclick="submitData()">上傳課堂記錄</button>
+      <button id="submitBtn" class="action-btn" onclick="submitData()">確認上傳</button>
     </div>
 
     <div id="readSection" class="card" style="display: none;">
-      <h3 id="readTitle"></h3>
+      <h3 id="readTitle" style="margin-bottom:10px;">查閱結果</h3>
       <div class="table-container" id="tableContainer"></div>
     </div>
   </div>
 
   <script>
-    // ⚠️ 你的 Google Apps Script API 網址 
+    // ⚠️ 請確保此網址與你最新的 Apps Script 部署網址一致
     const GAS_URL = "https://script.google.com/macros/s/AKfycbx7-1RAg-kf5H5b8DC3do55daEHxcJvF2DXkrNoBNS4XKTalS9QNKjoYA7psZcDRmIE0Q/exec"; 
     
     let globalData = [];
 
-    window.onload = function() {
-      fetch(GAS_URL + "?action=getData")
-        .then(response => response.json())
-        .then(data => initApp(data))
-        .catch(error => {
-          document.getElementById('loading').innerText = "連線失敗，請稍後再試。";
-        });
+    window.onload = () => {
+      fetch(GAS_URL + "?action=getData").then(res => res.json()).then(data => {
+        globalData = data;
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        
+        // 提取導師名單
+        let tutors = new Set();
+        data.forEach(r => r.tutors && r.tutors.split('/').forEach(t => tutors.add(t.trim())));
+        const ts = document.getElementById('tutorSelect');
+        ts.innerHTML = '<option value="">請選擇導師...</option>';
+        Array.from(tutors).sort().forEach(t => ts.innerHTML += `<option value="${t}">${t}</option>`);
+      }).catch(err => {
+        document.getElementById('loading').innerText = "連線超時，請檢查網絡或 API 設置。";
+      });
     };
-
-    function initApp(data) {
-      globalData = data;
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('main-content').style.display = 'block';
-      
-      let tutors = new Set();
-      data.forEach(row => { if(row.tutors) { row.tutors.split('/').forEach(t => tutors.add(t.trim())); } });
-      const tutorSelect = document.getElementById('tutorSelect');
-      Array.from(tutors).sort().forEach(t => { if(t) tutorSelect.innerHTML += `<option value="${t}">${t}</option>`; });
-    }
 
     function toggleMode() {
       const mode = document.getElementById('modeSelect').value;
-      if (mode === 'write') {
-        document.getElementById('writeSection').style.display = 'block';
-        document.getElementById('readSection').style.display = 'none';
-      } else {
-        document.getElementById('writeSection').style.display = 'none';
-        document.getElementById('readSection').style.display = 'block';
+      document.getElementById('writeSection').style.display = (mode === 'write' ? 'block' : 'none');
+      document.getElementById('readSection').style.display = (mode === 'write' ? 'none' : 'block');
+      onCourseChange();
+    }
+
+    // 格式化顯示文字
+    function formatLabel(row, isTable) {
+      const day = row.dayOfWeek ? row.dayOfWeek.replace('星期', '') : '';
+      const date = row.dateStr; // 已透過 getDisplayValues 取得 "2026年3月24日"
+      const time = row.timeStr;
+      if (isTable) {
+        return `第${row.lessonNum}堂<br>${date}<br>（${day}）<br>${time}`;
       }
-      onCourseChange(); 
+      return `第${row.lessonNum}堂 - ${date}（${day}）- ${time}`;
     }
 
     function onTutorChange() {
-      const tutor = document.getElementById('tutorSelect').value;
-      const schoolSelect = document.getElementById('schoolSelect');
-      resetSelect(schoolSelect, '請選擇...');
-      resetSelect(document.getElementById('courseSelect'), '請先選擇學校...');
-      resetSelect(document.getElementById('lessonSelect'), '請先選擇課程...');
-      document.getElementById('tableContainer').innerHTML = '';
-      document.getElementById('readTitle').innerText = '';
-
-      if (!tutor) { schoolSelect.disabled = true; return; }
-      schoolSelect.disabled = false;
-
-      let schools = new Set();
-      globalData.forEach(row => { if (row.tutors.includes(tutor) && row.school) schools.add(row.school); });
-      Array.from(schools).sort().forEach(s => schoolSelect.innerHTML += `<option value="${s}">${s}</option>`);
+      const t = document.getElementById('tutorSelect').value;
+      const s = document.getElementById('schoolSelect');
+      s.innerHTML = '<option value="">請選擇學校...</option>';
+      resetSelect('courseSelect', '請先選學校');
+      resetSelect('lessonSelect', '請先選課程');
+      if (!t) { s.disabled = true; return; }
+      s.disabled = false;
+      let set = new Set();
+      globalData.forEach(r => r.tutors.includes(t) && set.add(r.school));
+      set.forEach(v => s.innerHTML += `<option value="${v}">${v}</option>`);
     }
 
     function onSchoolChange() {
-      const tutor = document.getElementById('tutorSelect').value;
-      const school = document.getElementById('schoolSelect').value;
-      const courseSelect = document.getElementById('courseSelect');
-      
-      resetSelect(courseSelect, '請選擇...');
-      resetSelect(document.getElementById('lessonSelect'), '請先選擇課程...');
-      document.getElementById('tableContainer').innerHTML = '';
-      document.getElementById('readTitle').innerText = '';
-
-      if (!school) { courseSelect.disabled = true; return; }
-      courseSelect.disabled = false;
-
-      let courses = new Set();
-      globalData.forEach(row => { if (row.tutors.includes(tutor) && row.school === school && row.courseName) courses.add(row.courseName); });
-      Array.from(courses).sort().forEach(c => courseSelect.innerHTML += `<option value="${c}">${c}</option>`);
-    }
-
-    // 【新增】標籤文字產生器，處理「日期、星期轉換、時間」
-    function formatLessonLabel(row, isForTable = false) {
-      let shortDay = row.dayOfWeek.replace('星期', ''); // 把"星期二"變成"二"
-      let timeStr = row.timeStr ? row.timeStr : '';
-      
-      if (isForTable) {
-        // 表格中為了不佔太寬，使用換行符號 <br>
-        let timeHtml = timeStr ? `<br>${timeStr}` : '';
-        return `第${row.lessonNum}堂<br>${row.dateStr}（${shortDay}）${timeHtml}`;
-      } else {
-        // 下拉選單使用一橫線串接
-        let timeDash = timeStr ? ` - ${timeStr}` : '';
-        return `第${row.lessonNum}堂 - ${row.dateStr}（${shortDay}）${timeDash}`;
-      }
+      const t = document.getElementById('tutorSelect').value;
+      const s = document.getElementById('schoolSelect').value;
+      const c = document.getElementById('courseSelect');
+      c.innerHTML = '<option value="">請選擇課程...</option>';
+      resetSelect('lessonSelect', '請先選課程');
+      if (!s) { c.disabled = true; return; }
+      c.disabled = false;
+      let set = new Set();
+      globalData.forEach(r => r.tutors.includes(t) && r.school === s && set.add(r.courseName));
+      set.forEach(v => c.innerHTML += `<option value="${v}">${v}</option>`);
     }
 
     function onCourseChange() {
-      const tutor = document.getElementById('tutorSelect').value;
-      const school = document.getElementById('schoolSelect').value;
-      const course = document.getElementById('courseSelect').value;
+      const t = document.getElementById('tutorSelect').value;
+      const s = document.getElementById('schoolSelect').value;
+      const c = document.getElementById('courseSelect').value;
+      const l = document.getElementById('lessonSelect');
       const mode = document.getElementById('modeSelect').value;
-      const lessonSelect = document.getElementById('lessonSelect');
-
-      if (!course) { resetSelect(lessonSelect, '請先選擇課程...'); return; }
-
-      const filteredData = globalData.filter(row => 
-        row.tutors.includes(tutor) && row.school === school && row.courseName === course
-      );
-
+      l.innerHTML = '<option value="">請選擇課堂...</option>';
+      if (!c) { l.disabled = true; return; }
+      
+      const filtered = globalData.filter(r => r.tutors.includes(t) && r.school === s && r.courseName === c);
+      
       if (mode === 'write') {
-        lessonSelect.innerHTML = `<option value="">請選擇課堂...</option>`;
-        lessonSelect.disabled = false; 
-        
-        filteredData.forEach(row => {
-          const label = formatLessonLabel(row, false); // 呼叫格式化函數
-          lessonSelect.innerHTML += `<option value="${row.rowNum}">${label}</option>`;
-        });
+        l.disabled = false;
+        filtered.forEach(r => l.innerHTML += `<option value="${r.rowNum}">${formatLabel(r, false)}</option>`);
       } else {
-        renderTable(filteredData, school, course);
+        renderTable(filtered, s, c);
       }
     }
 
-    function resetSelect(element, defaultText) {
-      element.innerHTML = `<option value="">${defaultText}</option>`;
-      element.disabled = true;
+    function resetSelect(id, text) {
+      const el = document.getElementById(id);
+      el.innerHTML = `<option value="">${text}</option>`;
+      el.disabled = true;
     }
 
-    function parseDate(dateStr) {
-      const match = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-      if (match) return new Date(match[1], parseInt(match[2]) - 1, match[3]);
-      return new Date(dateStr); 
-    }
-
-    function renderTable(data, school, course) {
-      document.getElementById('readTitle').innerText = `${school} - ${course}`;
-      
-      let html = `<table><tr>
-                    <th>課堂及日期</th>
-                    <th>課室情況</th>
-                    <th>進度</th>
-                    <th>上課情況</th>
-                    <th>備注</th>
-                  </tr>`;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      data.forEach(row => {
-        const rowDate = parseDate(row.dateStr);
-        const isPast = rowDate < today; 
-        const titleHtml = formatLessonLabel(row, true); // 表格用的多行格式
-        
-        const getCellHtml = (content) => {
-          if (content) return content;
-          if (isPast) return `<span class="text-red">未填寫</span>`;
-          return `<span class="text-grey">-</span>`;
-        };
-
-        html += `<tr>
-                  <td>${titleHtml}</td>
-                  <td>${getCellHtml(row.roomStatus)}</td>
-                  <td>${getCellHtml(row.progress)}</td>
-                  <td>${getCellHtml(row.classStatus)}</td>
-                  <td>${getCellHtml(row.remarks)}</td>
-                 </tr>`;
+    function renderTable(data, s, c) {
+      document.getElementById('readTitle').innerText = `${s} | ${c}`;
+      let h = `<table><tr><th>課堂詳情</th><th>課室情況</th><th>進度</th><th>上課情況</th><th>備注</th></tr>`;
+      const now = new Date(); now.setHours(0,0,0,0);
+      data.forEach(r => {
+        const dMatch = r.dateStr.match(/(\d+)年(\d+)月(\d+)日/);
+        const isPast = dMatch ? new Date(dMatch[1], dMatch[2]-1, dMatch[3]) < now : false;
+        const cell = (txt) => txt ? txt : (isPast ? '<span class="text-red">未填寫</span>' : '<span class="text-grey">-</span>');
+        h += `<tr>
+          <td>${formatLabel(r, true)}</td>
+          <td>${cell(r.roomStatus)}</td>
+          <td>${cell(r.progress)}</td>
+          <td>${cell(r.classStatus)}</td>
+          <td>${cell(r.remarks)}</td>
+        </tr>`;
       });
-      html += `</table>`;
-      document.getElementById('tableContainer').innerHTML = html;
+      document.getElementById('tableContainer').innerHTML = h + '</table>';
     }
 
     function submitData() {
-      const rowNum = document.getElementById('lessonSelect').value;
-      if (!rowNum) return alert('請先完整選擇要填寫的課堂！');
-
-      const roomStatus = document.getElementById('roomStatus').value;
-      const progress = document.getElementById('progress').value;
-      const classStatus = document.getElementById('classStatus').value;
-      const remarks = document.getElementById('remarks').value;
-
+      const row = document.getElementById('lessonSelect').value;
+      if (!row) return alert('請先選取課堂！');
       const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
-      btn.innerText = '上傳中...';
+      btn.disabled = true; btn.innerText = '正在傳送...';
+      
+      const payload = {
+        action: 'update', rowNum: row,
+        roomStatus: document.getElementById('roomStatus').value,
+        progress: document.getElementById('progress').value,
+        classStatus: document.getElementById('classStatus').value,
+        remarks: document.getElementById('remarks').value
+      };
 
-      const payload = { action: 'update', rowNum, roomStatus, progress, classStatus, remarks };
-
-      fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.json())
-      .then(result => {
-        if (result.success) {
-          alert('資料已成功上傳！');
-          btn.disabled = false;
-          btn.innerText = '上傳課堂記錄';
-          
+      fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) })
+      .then(res => res.json()).then(res => {
+        if(res.success) {
+          alert('上傳成功！');
+          btn.disabled = false; btn.innerText = '確認上傳';
+          // 更新本地數據
+          const r = globalData.find(i => i.rowNum == row);
+          r.roomStatus = payload.roomStatus; r.progress = payload.progress; 
+          r.classStatus = payload.classStatus; r.remarks = payload.remarks;
+          // 清空輸入
           document.getElementById('roomStatus').value = '';
           document.getElementById('progress').value = '';
           document.getElementById('classStatus').value = '';
           document.getElementById('remarks').value = '';
-
-          const updatedRow = globalData.find(r => r.rowNum == rowNum);
-          if(updatedRow) {
-            updatedRow.roomStatus = roomStatus;
-            updatedRow.progress = progress;
-            updatedRow.classStatus = classStatus;
-            updatedRow.remarks = remarks;
-          }
-        } else { throw new Error(result.error || "未知錯誤"); }
-      })
-      .catch(error => {
-        alert('上傳失敗：' + error.message);
-        btn.disabled = false;
-        btn.innerText = '上傳課堂記錄';
-      });
+        }
+      }).catch(e => alert('上傳失敗，請聯絡管理員'));
     }
   </script>
 </body>
